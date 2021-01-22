@@ -1,16 +1,21 @@
 package com.github.edufratari.crudclient.services;
 
-import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
+
+import javax.persistence.EntityNotFoundException;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.github.edufratari.crudclient.dto.ClientDTO;
 import com.github.edufratari.crudclient.entities.Client;
 import com.github.edufratari.crudclient.repositories.ClientRepository;
+import com.github.edufratari.crudclient.services.exceptions.DatabaseException;
 import com.github.edufratari.crudclient.services.exceptions.ResourceNotFoundException;
 
 @Service
@@ -20,9 +25,9 @@ public class ClientService {
 	private ClientRepository repository;
 	
 	@Transactional(readOnly = true)
-	public List<ClientDTO> findAll() {
-		List<Client> list = repository.findAll();
-		return list.stream().map(x -> new ClientDTO(x)).collect(Collectors.toList());
+	public Page<ClientDTO> findAllPaged(PageRequest pageRequest) {
+		Page<Client> list = repository.findAll(pageRequest);
+		return list.map(x -> new ClientDTO(x));
 	}
 
 	@Transactional(readOnly = true)
@@ -34,20 +39,39 @@ public class ClientService {
 
 	@Transactional
 	public ClientDTO insert(ClientDTO clientDto) {
-		Client entity = populateClientEntity(clientDto);
-
+		Client entity = new Client();
+		copyDtoToEntity(clientDto, entity);
 		entity = repository.save(entity);
-		
 		return new ClientDTO(entity);
 	}
 
-	private Client populateClientEntity(ClientDTO clientDto) {
-		Client entity = new Client();
+	@Transactional
+	public ClientDTO update(Long id, ClientDTO clientDto) {
+		try {			
+			Client entity = repository.getOne(id);
+			copyDtoToEntity(clientDto, entity);
+			entity = repository.save(entity);
+			return new ClientDTO(entity);
+		}catch (EntityNotFoundException e) {
+			throw new ResourceNotFoundException("Id not found " + id);
+		}
+	}
+
+	public void delete(Long id) {
+		try {			
+			repository.deleteById(id);
+		}catch (EmptyResultDataAccessException e) {
+			throw new ResourceNotFoundException("Id not found " + id);
+		}catch (DataIntegrityViolationException e) {
+			throw new DatabaseException("Integrity violation");
+		}
+	}
+	
+	private void copyDtoToEntity(ClientDTO clientDto, Client entity) {
 		entity.setName(clientDto.getName());
 		entity.setCpf(clientDto.getCpf());
 		entity.setIncome(clientDto.getIncome());
 		entity.setBirthDate(clientDto.getBirthDate());
 		entity.setChildren(clientDto.getChildren());
-		return entity;
 	}
 }
